@@ -8,7 +8,23 @@ const TARIF_IMAGE = path.join(__dirname, "tariflar.jpg"); // shu rasmni projectg
 
 const app = express();
 app.get("/", (_, res) => res.send("Bot ishlayapti ✅"));
-app.listen(process.env.PORT || 3000);
+app.get("/health", (_, res) => res.json({ status: "ok", time: new Date().toISOString() }));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🌐 Server port ${PORT} da ishlamoqda`));
+
+// Keep-alive: Render free plan da o'chib qolmaslik uchun
+// O'zini har 10 daqiqada ping qiladi
+const RENDER_URL = process.env.RENDER_EXTERNAL_URL;
+if (RENDER_URL) {
+  setInterval(async () => {
+    try {
+      await fetch(`${RENDER_URL}/health`);
+      console.log("💓 Keep-alive ping yuborildi");
+    } catch(e) {
+      console.log("⚠️ Keep-alive xato:", e.message);
+    }
+  }, 5 * 60 * 1000); // har 10 daqiqada
+  console.log("💓 Keep-alive yoqildi:", RENDER_URL);
 
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 console.log("✅ Bot ishga tushdi! Token:", process.env.BOT_TOKEN?.slice(0,15));
