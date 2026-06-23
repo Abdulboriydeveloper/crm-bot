@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: nargiza-bot
+    env: node
+    buildCommand: npm install
+    startCommand: node bot.js
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: SPREADSHEET_ID
+        sync: false
+      - key: GOOGLE_CREDENTIALS
+        sync: false
+      - key: ADMIN_CHAT_ID
+        sync: false
