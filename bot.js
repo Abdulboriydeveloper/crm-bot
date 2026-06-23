@@ -2,6 +2,10 @@ require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
 const express = require("express");
 
+const path = require("path");
+
+const TARIF_IMAGE = path.join(__dirname, "tariflar.jpg"); // shu rasmni projectga tashlang
+
 const app = express();
 app.get("/", (_, res) => res.send("Bot ishlayapti ✅"));
 app.listen(process.env.PORT || 3000);
@@ -83,28 +87,31 @@ async function writeToSheets(params) {
 // ── Sessions ────────────────────────────────────────────────────
 const sessions = {};
 
-const TARIFLAR = `
-🎨 *Nargiza Xayitbayevna — Komuflyaj texnikasi*
+const TARIF_TEXT = `
+🎨 Ana endi to'lov qismiga o'tamiz.
 
-━━━━━━━━━━━━━━━━━━
-1️⃣ *STANDART* — 500,000 so'm
-   • Yozib olingan darslar
-   • PDF materiallar
+━━━━━━━━━━━━━━━
 
-2️⃣ *PREMIUM* — 900,000 so'm
-   • Standart + LIVE sessiya
-   • Sertifikat
+Humo:
+💳 9860060943559306
+👤 Tojiyeva Nargiza
 
-3️⃣ *VIP* — 1,500,000 so'm
-   • Premium + Konsultatsiya
-   • Umrbod kirish
-━━━━━━━━━━━━━━━━━━
+Uzcard:
+💳 6262480057951125
+👤 Tojiyeva Nargiza
 
-💳 *To'lov:*
-🏦 Uzcard: \`8600 1234 5678 9012\`
-🏦 Humo: \`9860 2345 6789 0123\`
+Visa:
+💳 4278320027976132
+👤 Tojiyeva Nargiza
 
-✅ To'lov qilib *chek rasmini* yuboring!
+━━━━━━━━━━━━━━━
+
+To'lov qilgandan so'ng screenshot qilib mana shu telegram botga yuborasiz.
+
+(Screenshotda summa, sana va to'lov amalga oshgan vaqti bo'lishi shart) ✅
+
+Menjer bilan bog'lanish👇
+@nargiza_khayitbayevna_admin
 `;
 
 // ── /start ──────────────────────────────────────────────────────
@@ -114,7 +121,7 @@ bot.onText(/\/start/, async (msg) => {
   sessions[chatId] = { step: "ask_name" };
   await bot.sendMessage(
     chatId,
-    `👋 *Assalomu alaykum!*\n\nNargiza Xayitbayevna ning masterclassiga xush kelibsiz! 🎨\n\n*Ismingizni* kiriting:`,
+    `Assalomu alaykum ro'yxatdan o'tish uchun ism-familiyangizni qoldiring!`,
     { parse_mode: "Markdown", reply_markup: { remove_keyboard: true } }
   );
 });
@@ -202,10 +209,16 @@ bot.on("message", async (msg) => {
       date: session.date
     });
 
-    await bot.sendMessage(chatId, TARIFLAR, {
-      parse_mode: "Markdown",
-      reply_markup: { remove_keyboard: true }
-    });
+    await bot.sendPhoto(
+      chatId,
+      TARIF_IMAGE,
+      {
+        caption: TARIF_TEXT,
+        reply_markup: {
+          remove_keyboard: true
+        }
+      }
+    );
     return;
   }
 
@@ -228,7 +241,14 @@ bot.on("message", async (msg) => {
 
       await bot.sendMessage(
         chatId,
-        `✅ *Rahmat, ${session.name}!*\n\n🎉 *Kursga muvaffaqiyatli ro'yxatdan o'tdingiz!*\n\nTez orada siz bilan bog'lanamiz! 🎨`,
+        `✅ *Rahmat, ${session.name}!*\n\n🎉 😊Tabriklaymiz siz muvaffaqiyatli ro'yxatdan o'tdingiz!
+      Operatorlarimiz 24 soat ichida siz bilan bog'lanishadi
+
+      To'lovda muammo bo'lsa:
+      +998906297017
+      +998777413014
+
+      raqamga aloqaga chiqing.`,
         { parse_mode: "Markdown" }
       );
 
