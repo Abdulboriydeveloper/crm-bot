@@ -9,6 +9,15 @@ const TARIF_IMAGE = path.join(__dirname, "tariflar.jpg");
 const app = express();
 app.use(express.json());
 
+// CORS — Vercel dan so'rovlarga ruxsat
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(200).end();
+  next();
+});
+
 app.get("/", (_, res) => res.send("Bot ishlayapti ✅"));
 app.get("/health", (_, res) => res.json({ status: "ok", time: new Date().toISOString() }));
 
