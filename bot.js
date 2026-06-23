@@ -236,7 +236,7 @@ bot.on("message", async (msg) => {
 
   // ── Chek (rasm) ─────────────────────────────────────────────
   if (session.step === "wait_payment") {
-    if (photo?.length > 0) {
+    if (photo?.length > 0 || text) {
       session.step = "done";
       console.log(`✅ Chek keldi — leadId: ${session.leadId}`);
 
