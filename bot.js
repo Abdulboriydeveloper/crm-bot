@@ -1,10 +1,9 @@
 require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
 const express = require("express");
-
 const path = require("path");
 
-const TARIF_IMAGE = path.join(__dirname, "tariflar.jpg"); // shu rasmni projectga tashlang
+const TARIF_IMAGE = path.join(__dirname, "tariflar.jpg");
 
 const app = express();
 app.get("/", (_, res) => res.send("Bot ishlayapti ✅"));
@@ -12,22 +11,22 @@ app.get("/health", (_, res) => res.json({ status: "ok", time: new Date().toISOSt
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🌐 Server port ${PORT} da ishlamoqda`));
 
-// Keep-alive: Render free plan da o'chib qolmaslik uchun
-// O'zini har 10 daqiqada ping qiladi
+// Keep-alive
 const RENDER_URL = process.env.RENDER_EXTERNAL_URL;
 if (RENDER_URL) {
   setInterval(async () => {
     try {
       await fetch(`${RENDER_URL}/health`);
-      console.log("💓 Keep-alive ping yuborildi");
+      console.log("💓 Keep-alive ping");
     } catch(e) {
       console.log("⚠️ Keep-alive xato:", e.message);
     }
-  }, 5 * 60 * 1000); // har 10 daqiqada
+  }, 5 * 60 * 1000);
   console.log("💓 Keep-alive yoqildi:", RENDER_URL);
+}
 
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
-console.log("✅ Bot ishga tushdi! Token:", process.env.BOT_TOKEN?.slice(0,15));
+console.log("✅ Bot ishga tushdi! Token:", process.env.BOT_TOKEN?.slice(0, 15));
 
 // ── Supabase ────────────────────────────────────────────────────
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -86,7 +85,6 @@ async function writeToSheets(params) {
     const url = new URL(WEBAPP_URL);
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
     url.searchParams.set("t", Date.now());
-    console.log("📊 Sheets ga yuborilmoqda:", url.toString().slice(0, 80));
     const res = await fetch(url.toString(), { method: "GET", redirect: "follow" });
     const text = await res.text();
     console.log("📊 Sheets javob:", text.slice(0, 100));
@@ -103,8 +101,7 @@ async function writeToSheets(params) {
 // ── Sessions ────────────────────────────────────────────────────
 const sessions = {};
 
-const TARIF_TEXT = `
-🎨 Ana endi to'lov qismiga o'tamiz.
+const TARIF_TEXT = `Ana endi to'lov qismiga o'tamiz.
 
 ━━━━━━━━━━━━━━━
 
@@ -127,8 +124,7 @@ To'lov qilgandan so'ng screenshot qilib mana shu telegram botga yuborasiz.
 (Screenshotda summa, sana va to'lov amalga oshgan vaqti bo'lishi shart) ✅
 
 Menjer bilan bog'lanish👇
-@nargiza_khayitbayevna_admin
-`;
+@nargiza_khayitbayevna_admin`;
 
 // ── /start ──────────────────────────────────────────────────────
 bot.onText(/\/start/, async (msg) => {
@@ -137,8 +133,8 @@ bot.onText(/\/start/, async (msg) => {
   sessions[chatId] = { step: "ask_name" };
   await bot.sendMessage(
     chatId,
-    `Assalomu alaykum ro'yxatdan o'tish uchun ism-familiyangizni qoldiring!`,
-    { parse_mode: "Markdown", reply_markup: { remove_keyboard: true } }
+    "Assalomu alaykum ro'yxatdan o'tish uchun ism-familiyangizni qoldiring!",
+    { reply_markup: { remove_keyboard: true } }
   );
 });
 
@@ -151,7 +147,6 @@ bot.on("message", async (msg) => {
 
   console.log(`📨 Xabar [${chatId}]: text="${text}" photo=${!!photo} contact=${!!contact}`);
 
-  // /start ni skip qilish (onText allaqachon ishladi)
   if (text?.startsWith("/")) return;
 
   const session = sessions[chatId];
@@ -174,9 +169,8 @@ bot.on("message", async (msg) => {
 
     await bot.sendMessage(
       chatId,
-      `Rahmat, *${session.name}*! 😊\n\n📞 *Telefon raqamingizni* kiriting:`,
+      `Rahmat, ${session.name}! 😊\n\n📞 Telefon raqamingizni kiriting:`,
       {
-        parse_mode: "Markdown",
         reply_markup: {
           keyboard: [[{ text: "📱 Raqamimni yuborish", request_contact: true }]],
           resize_keyboard: true,
@@ -208,7 +202,7 @@ bot.on("message", async (msg) => {
 
     console.log(`📞 Raqam saqlandi: ${session.phone}`);
 
-    // 1. Supabase ga yangi lid
+    // 1. Supabase
     const result = await supabaseInsert("leads", {
       name: session.name,
       phone: session.phone,
@@ -217,7 +211,7 @@ bot.on("message", async (msg) => {
     session.leadId = result?.[0]?.id || null;
     console.log(`🆔 Lead ID: ${session.leadId}`);
 
-    // 2. Sheets ga
+    // 2. Sheets
     await writeToSheets({
       action: "add",
       name: session.name,
@@ -225,16 +219,18 @@ bot.on("message", async (msg) => {
       date: session.date
     });
 
-    await bot.sendPhoto(
-      chatId,
-      TARIF_IMAGE,
-      {
+    // Tariflar rasmi bor bo'lsa rasm bilan, yo'q bo'lsa matn bilan yuborish
+    const fs = require("fs");
+    if (fs.existsSync(TARIF_IMAGE)) {
+      await bot.sendPhoto(chatId, TARIF_IMAGE, {
         caption: TARIF_TEXT,
-        reply_markup: {
-          remove_keyboard: true
-        }
-      }
-    );
+        reply_markup: { remove_keyboard: true }
+      });
+    } else {
+      await bot.sendMessage(chatId, TARIF_TEXT, {
+        reply_markup: { remove_keyboard: true }
+      });
+    }
     return;
   }
 
@@ -244,11 +240,9 @@ bot.on("message", async (msg) => {
       session.step = "done";
       console.log(`✅ Chek keldi — leadId: ${session.leadId}`);
 
-      // Supabase yangilash
       if (session.leadId) {
         await supabaseUpdate(session.leadId, { stage: "Chek yubordi" });
       }
-      // Sheets
       await writeToSheets({
         action: "move",
         phone: session.phone,
@@ -257,29 +251,19 @@ bot.on("message", async (msg) => {
 
       await bot.sendMessage(
         chatId,
-        `✅ *Rahmat, ${session.name}!*\n\n🎉 😊Tabriklaymiz siz muvaffaqiyatli ro'yxatdan o'tdingiz!
-      Operatorlarimiz 24 soat ichida siz bilan bog'lanishadi
-
-      To'lovda muammo bo'lsa:
-      +998906297017
-      +998777413014
-
-      raqamga aloqaga chiqing.`,
-        { parse_mode: "Markdown" }
+        `✅ Rahmat, ${session.name}!\n\n🎉 Tabriklaymiz siz muvaffaqiyatli ro'yxatdan o'tdingiz!\nOperatorlarimiz 24 soat ichida siz bilan bog'lanishadi\n\nTo'lovda muammo bo'lsa:\n+998906297017\n+998777413014\n\nraqamga aloqaga chiqing.`
       );
 
       if (process.env.ADMIN_CHAT_ID) {
         await bot.sendMessage(
           process.env.ADMIN_CHAT_ID,
-          `💰 *Yangi to'lov!*\n👤 ${session.name}\n📞 ${session.phone}`,
-          { parse_mode: "Markdown" }
+          `💰 Yangi to'lov!\n👤 ${session.name}\n📞 ${session.phone}`
         );
         bot.forwardMessage(process.env.ADMIN_CHAT_ID, chatId, msg.message_id);
       }
       return;
     }
 
-    // Rasm emas — bosqich tanlash
     bot.sendMessage(chatId, "📸 Chek rasmini yuboring yoki holatni tanlang:", {
       reply_markup: {
         inline_keyboard: [
@@ -293,11 +277,11 @@ bot.on("message", async (msg) => {
   }
 
   if (session.step === "done") {
-    bot.sendMessage(chatId, "✅ Siz allaqachon ro'yxatdan o'tgansiz!\nSavollar: @nargiza_admin");
+    bot.sendMessage(chatId, "✅ Siz allaqachon ro'yxatdan o'tgansiz!\nSavollar: @nargiza_khayitbayevna_admin");
   }
 });
 
-// ── Callback (inline tugmalar) ──────────────────────────────────
+// ── Callback ────────────────────────────────────────────────────
 bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
   const session = sessions[chatId];
@@ -313,8 +297,8 @@ bot.on("callback_query", async (query) => {
 
   bot.answerCallbackQuery(query.id, { text: `✅ "${stage}" ga o'tkazildi` });
   bot.editMessageText(
-    `Holat: *${stage}* ✅\n\nChek yuborishni unutmang 📸`,
-    { chat_id: chatId, message_id: query.message.message_id, parse_mode: "Markdown" }
+    `Holat: ${stage} ✅\n\nChek yuborishni unutmang 📸`,
+    { chat_id: chatId, message_id: query.message.message_id }
   );
 });
 
