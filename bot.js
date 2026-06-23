@@ -2,12 +2,38 @@ require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
 const express = require("express");
 const path = require("path");
+const fs = require("fs");
 
 const TARIF_IMAGE = path.join(__dirname, "tariflar.jpg");
 
 const app = express();
+app.use(express.json()); // ← YANGI: JSON body parsing
+
 app.get("/", (_, res) => res.send("Bot ishlayapti ✅"));
 app.get("/health", (_, res) => res.json({ status: "ok", time: new Date().toISOString() }));
+
+// ← YANGI: CRM dan xabar yuborish endpoint
+app.post("/send-message", async (req, res) => {
+  const { chat_id, text } = req.body;
+  if (!chat_id || !text) return res.status(400).json({ error: "chat_id va text kerak" });
+  try {
+    await bot.sendMessage(chat_id, text);
+    // Xabarni Supabase ga saqlash
+    if (req.body.lead_id) {
+      await saveMessage({
+        lead_id: req.body.lead_id,
+        chat_id: Number(chat_id),
+        text,
+        from_bot: true,
+        msg_type: "text"
+      });
+    }
+    res.json({ status: "ok" });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🌐 Server port ${PORT} da ishlamoqda`));
 
@@ -74,6 +100,12 @@ async function supabaseUpdate(id, data) {
     console.error("❌ Supabase update xato:", e.message);
     return null;
   }
+}
+
+// ← YANGI: xabarni messages jadvaliga saqlash
+async function saveMessage({ lead_id, chat_id, text, from_bot = false, msg_type = "text", file_id = null }) {
+  if (!lead_id) return null;
+  return supabaseInsert("messages", { lead_id, chat_id, text, from_bot, msg_type, file_id });
 }
 
 // ── Google Sheets ───────────────────────────────────────────────
@@ -150,8 +182,18 @@ bot.on("message", async (msg) => {
   if (text?.startsWith("/")) return;
 
   const session = sessions[chatId];
-  if (!session) {
-    bot.sendMessage(chatId, "Boshlash uchun /start ni bosing 👆");
+
+  // ← YANGI: session yo'q yoki done = ro'yxatdan o'tgan lid xabar yozmoqda
+  if (!session || session.step === "done") {
+    const leadId = session?.leadId;
+    if (leadId) {
+      if (text) {
+        await saveMessage({ lead_id: leadId, chat_id: chatId, text, from_bot: false, msg_type: "text" });
+      } else if (photo?.length > 0) {
+        const fileId = photo[photo.length - 1].file_id;
+        await saveMessage({ lead_id: leadId, chat_id: chatId, text: "📸 Rasm yubordi", from_bot: false, msg_type: "photo", file_id: fileId });
+      }
+    }
     return;
   }
 
@@ -202,16 +244,17 @@ bot.on("message", async (msg) => {
 
     console.log(`📞 Raqam saqlandi: ${session.phone}`);
 
-    // 1. Supabase
+    // Supabase ga yangi lid — ← YANGI: chat_id qo'shildi
     const result = await supabaseInsert("leads", {
       name: session.name,
       phone: session.phone,
-      stage: "Yangi lid"
+      stage: "Yangi lid",
+      chat_id: chatId  // ← YANGI
     });
     session.leadId = result?.[0]?.id || null;
     console.log(`🆔 Lead ID: ${session.leadId}`);
 
-    // 2. Sheets
+    // Sheets
     await writeToSheets({
       action: "add",
       name: session.name,
@@ -219,8 +262,7 @@ bot.on("message", async (msg) => {
       date: session.date
     });
 
-    // Tariflar rasmi bor bo'lsa rasm bilan, yo'q bo'lsa matn bilan yuborish
-    const fs = require("fs");
+    // Tariflar
     if (fs.existsSync(TARIF_IMAGE)) {
       await bot.sendPhoto(chatId, TARIF_IMAGE, {
         caption: TARIF_TEXT,
@@ -231,14 +273,31 @@ bot.on("message", async (msg) => {
         reply_markup: { remove_keyboard: true }
       });
     }
+
+    // ← YANGI: tariflar xabarini saqlash
+    await saveMessage({
+      lead_id: session.leadId,
+      chat_id: chatId,
+      text: TARIF_TEXT,
+      from_bot: true,
+      msg_type: "text"
+    });
     return;
   }
 
-  // ── Chek (rasm) ─────────────────────────────────────────────
+  // ── Chek yoki matn ─────────────────────────────────────────
   if (session.step === "wait_payment") {
     if (photo?.length > 0 || text) {
       session.step = "done";
       console.log(`✅ Chek keldi — leadId: ${session.leadId}`);
+
+      // ← YANGI: xabarni saqlash
+      if (photo?.length > 0) {
+        const fileId = photo[photo.length - 1].file_id;
+        await saveMessage({ lead_id: session.leadId, chat_id: chatId, text: "📸 Chek yubordi", from_bot: false, msg_type: "photo", file_id: fileId });
+      } else if (text) {
+        await saveMessage({ lead_id: session.leadId, chat_id: chatId, text, from_bot: false, msg_type: "text" });
+      }
 
       if (session.leadId) {
         await supabaseUpdate(session.leadId, { stage: "Chek yubordi" });
@@ -249,17 +308,19 @@ bot.on("message", async (msg) => {
         stage: "Chek yubordi"
       });
 
-      await bot.sendMessage(
-        chatId,
-        `✅ Rahmat, ${session.name}!\n\n🎉 Tabriklaymiz siz muvaffaqiyatli ro'yxatdan o'tdingiz!\nOperatorlarimiz 24 soat ichida siz bilan bog'lanishadi\n\nTo'lovda muammo bo'lsa:\n+998906297017\n+998777413014\n\nraqamga aloqaga chiqing.`
-      );
+      const reply = `✅ Rahmat, ${session.name}!\n\n🎉 Tabriklaymiz siz muvaffaqiyatli ro'yxatdan o'tdingiz!\nOperatorlarimiz 24 soat ichida siz bilan bog'lanishadi\n\nTo'lovda muammo bo'lsa:\n+998906297017\n+998777413014\n\nraqamga aloqaga chiqing.`;
+
+      await bot.sendMessage(chatId, reply);
+
+      // ← YANGI: javob xabarini saqlash
+      await saveMessage({ lead_id: session.leadId, chat_id: chatId, text: reply, from_bot: true, msg_type: "text" });
 
       if (process.env.ADMIN_CHAT_ID) {
         await bot.sendMessage(
           process.env.ADMIN_CHAT_ID,
           `💰 Yangi to'lov!\n👤 ${session.name}\n📞 ${session.phone}`
         );
-        bot.forwardMessage(process.env.ADMIN_CHAT_ID, chatId, msg.message_id);
+        if (photo?.length > 0) bot.forwardMessage(process.env.ADMIN_CHAT_ID, chatId, msg.message_id);
       }
       return;
     }
